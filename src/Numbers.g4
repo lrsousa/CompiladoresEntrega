@@ -1,0 +1,15 @@
+grammar Numbers;
+
+number: BINARY;
+
+NEWLINE : [\r\n ]+;
+
+BINARY : BIN_DIGIT+ 'b';
+DECIMAL: '-'?DEC_DIGIT+;
+REAL: '-'?DEC_DIGIT+'.'DEC_DIGIT+;
+HEXADECIMAL: '0''x'HEX_DIGIT+;
+EXPONENCIAL: '-'?DEC_DIGIT+(('.'DEC_DIGIT+)?)'e+'DEC_DIGIT+;
+
+BIN_DIGIT: [01];
+DEC_DIGIT: [0-9];
+HEX_DIGIT: [0-9|a-f|A-F];
