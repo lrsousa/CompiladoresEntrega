@@ -52,17 +52,18 @@
       </java>
     </target>
 
-    <target name="rungui" depends="jar">
-      <java fork="true" classname="${grun}">
-        <arg value="Numbers"/>
-        <arg value="numbers"/>
-        <arg value="-gui"/>
-        <classpath>
-          <path refid="classpath"/>
-          <path location="${jar.dir}/${ant.project.name}.jar"/>
-        </classpath>
-      </java>
-    </target>
+	  <target name="rungui" depends="jar">
+	    <java fork="true" classname="${grun}">
+	      <arg value="Numbers"/>
+	      <arg value="EXPRESSAO"/>
+	      <arg value="-gui"/>
+	      <arg value="arquivo.kenai" />
+	      <classpath>
+	        <path refid="classpath"/>
+	        <path location="${jar.dir}/${ant.project.name}.jar"/>
+	      </classpath>
+	    </java>
+	  </target>
 
     <target name="generate"  description="Generates the lexer and parser from the .g grammar file.">
         <echo>Generating the lexer and parser...</echo>
