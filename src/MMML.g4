@@ -2,21 +2,49 @@ grammar MMML;
 
 @header {
 import java.util.*;
+import java.util.ArrayList;
+
+import NestedPackage.NestedSymbolTable;
+import NestedPackage.SymbolEntry;
 }
 
 @parser::members {
-   public String testaTipoNumeros(String a, String b) {
-       if (a == "int" && b == "int") {
-		   return "int";
-		} else if (a == "float" && b == "float") {
+   public NestedSymbolTable<String> tabelaSimbolo = new NestedSymbolTable<String>();
+   
+   public String testaTipoNumerosExp(String a, String b) {
+		if (a == "string" || b == "string") {
+		   return null;
+		} else {
 		   return "float";
 		}
-		else if ((a == "int" && b == "float") || (a == "float" && b == "float"))
-		{
-			return "float";
-		}
-		return null;
    }
+   
+   public String testaTipoNumeros(String a, String b) {
+		if (a == "string" || b == "string") {
+		   return null;
+		} else if (a == "float" || b == "float") {
+		   return "float";
+		} else {
+			return "int";
+		}
+   }
+   
+   public String testaBool(String a, String b) {
+		if (a == "string" || b == "string") {
+		   return null;
+		} else {
+		   return "bool";
+		}
+   }
+   
+   private void imprimirTabela() {
+      int i= 1;
+      for (SymbolEntry<String> entry : tabelaSimbolo.getEntries()) {
+         System.out.println(i +" simbolo= "+ entry);
+         i++;
+      }
+   }
+   
 }
 
 
@@ -42,36 +70,33 @@ fdecl: 'def' functionname fdeclparams '=' funcbody   #funcdef_rule
 
 fdeclparams
 returns [List<String> plist]
-@init {
-    $plist = new ArrayList<String>();
-}
-@after {
-    for (String s : $plist) {
-        System.out.println("Parametro: " + s);
-    }
-}
+	@init {
+	    $plist = new ArrayList<String>();
+	}
+	@after {
+	    for (String s : $plist) {
+	        System.out.println("Parametro: " + s);
+	    }
+	}
     :   fdeclparam
         {
             $plist.add($fdeclparam.pname);
         }
-        fdeclparams_cont[$plist]
-
-                                                     #fdeclparams_one_param_rule
-    |                                                #fdeclparams_no_params
+        fdeclparams_cont[$plist]						 #fdeclparams_one_param_rule
+	|													 #fdeclparams_no_params
     ;
 
-fdeclparams_cont[List<String> plist]
+fdeclparams_cont [List<String> plist]
     : ',' fdeclparam
         {
             $plist.add($fdeclparam.pname);
         }
-        fdeclparams_cont[$plist]
-                                                     #fdeclparams_cont_rule
-    |                                                #fdeclparams_end_rule
+        fdeclparams_cont[$plist]						#fdeclparams_cont_rule
+    |                                                	#fdeclparams_end_rule
     ;
 
 fdeclparam
-    returns [String pname, String ptype]
+returns [String pname, String ptype]
     : symbol ':' type
         {
             $pname = $symbol.text;
@@ -98,6 +123,7 @@ returns [String tipo]
     | 'bool'	{$tipo = "bool";}
     | 'str'		{$tipo = "string";} 
     | 'float'	{$tipo = "float";}
+    | 'char'	{$tipo = "char";}
     ;
 
 sequence_type
@@ -114,10 +140,11 @@ returns [int dimension=0, String base]
         }											#sequencetype_sequence_rule
     ;
 
-funcbody:
-        ifexpr                                       #fbody_if_rule
-    |   letexpr                                      #fbody_let_rule
-    |   metaexpr                                     #fbody_expr_rule
+funcbody
+returns [String tipo]
+	:	ifexpr                                       #fbody_if_rule
+    |   letexpr {$tipo = $letexpr.tipo;}                                      #fbody_let_rule
+    |   metaexpr { $tipo = $metaexpr.tipo; imprimirTabela();}       		  #fbody_expr_rule
     ;
 
 ifexpr
@@ -125,87 +152,99 @@ ifexpr
     ;
 
 letexpr
-    : 'let' letlist 'in' funcbody                    #letexpression_rule
+returns [NestedSymbolTable<String> tabela, String tipo]
+    : 'let' letlist 'in' {tabelaSimbolo = $letlist.tabela;} funcbody {tabelaSimbolo = tabelaSimbolo.getParent(); $tipo = $funcbody.tipo;}                    #letexpression_rule
     ;
 
 letlist
-    : letvarexpr  letlist_cont                       #letlist_rule
+returns [NestedSymbolTable<String> tabela]
+	@init
+	{
+		$tabela = new NestedSymbolTable<String>();
+	}
+    : letvarexpr[$tabela] {$tabela.store($letvarexpr.nome, $letvarexpr.tipo);} letlist_cont[$tabela]                             #letlist_rule
     ;
 
-letlist_cont
-    : ',' letvarexpr letlist_cont                    #letlist_cont_rule
-    |                                                #letlist_cont_end
+letlist_cont [NestedSymbolTable<String> tabela]
+    : ',' letvarexpr[$tabela] {$tabela.store($letvarexpr.nome, $letvarexpr.tipo);} letlist_cont[$tabela]                    #letlist_cont_rule
+    |                                                				   #letlist_cont_end
     ;
 
-letvarexpr
-    :    symbol '=' funcbody                         #letvarattr_rule
-    |    '_'    '=' funcbody                         #letvarresult_ignore_rule
-    |    symbol '::' symbol '=' funcbody             #letunpack_rule
+letvarexpr [NestedSymbolTable<String> tabela]
+returns [String nome, String tipo]
+    :    symbol {$nome = $symbol.text;} '=' funcbody {$tipo = $funcbody.tipo;}                         						 #letvarattr_rule
+    |    '_'    '=' funcbody {$nome = "_"; $tipo = $funcbody.tipo;}                         #letvarresult_ignore_rule
+    |    esquerda = symbol '::' direita = symbol {$nome = $esquerda.text + $direita.text;} '=' funcbody {$tipo = $funcbody.tipo;}              #letunpack_rule
     ;
 
 metaexpr
 returns [String tipo]
-    : '(' funcbody ')'                               #me_exprparens_rule     // Anything in parenthesis -- if, let, funcion call, etc
-    | sequence_expr                                  #me_list_create_rule    // creates a list [x]
-    | TOK_NEG symbol                                 
+    : '(' fbody = funcbody ')'
     	{
-    		$tipo = "bool";
+    		$tipo = $fbody.tipo;
+    	}                               			 #me_exprparens_rule     // Anything in parenthesis -- if, let, funcion call, etc
+    | sequence_expr                                  #me_list_create_rule    // creates a list [x]
+    | TOK_NEG simbolo = symbol {
+    		if($simbolo.tipo == "string") {
+	    		$tipo = "string";
+    		} else {
+	    		$tipo = "int";
+    			
+    		}
+    		
     	}											 #me_boolneg_rule        // Negate a variable
     | TOK_NEG '(' funcbody ')'
     	{
-    		$tipo = "bool";
+    		
     	}					                        #me_boolnegparens_rule  //        or anything in between ( )
     | esquerda = metaexpr TOK_POWER direita = metaexpr
     	{
-    		$tipo = testaTipoNumeros($esquerda.tipo, $direita.tipo);
+    		$tipo = testaTipoNumerosExp($esquerda.tipo, $direita.tipo);
     	}                    						 #me_exprpower_rule      // Exponentiation
     | esquerda = metaexpr TOK_CONCAT direita = metaexpr
     	{
-    		if($esquerda.tipo == "string" && $direita.tipo == "string")
-    		{
+    		if($esquerda.tipo == "string" || $direita.tipo == "string") {
     			$tipo = "string";
     		}
     	}                   						 #me_listconcat_rule     // Sequence concatenation
     | esquerda = metaexpr TOK_DIV_OR_MUL direita = metaexpr
     	{
     		$tipo = testaTipoNumeros($esquerda.tipo, $direita.tipo);
-    								}                #me_exprmuldiv_rule     // Div and Mult are equal
+		}                							 #me_exprmuldiv_rule     // Div and Mult are equal
     | esquerda = metaexpr TOK_PLUS_OR_MINUS direita = metaexpr
     	{
     		$tipo = testaTipoNumeros($esquerda.tipo, $direita.tipo);
     	}            								 #me_exprplusminus_rule  // Sum and Sub are equal
-    | metaexpr TOK_CMP_GT_LT metaexpr
+    | esquerda = metaexpr TOK_CMP_GT_LT direita = metaexpr
     	{
-    		$tipo = "bool";
+    		$tipo = testaBool($esquerda.tipo, $direita.tipo);
     	}                							 #me_boolgtlt_rule       // < <= >= > are equal
-    | metaexpr TOK_CMP_EQ_DIFF metaexpr
+    | esquerda = metaexpr TOK_CMP_EQ_DIFF direita = metaexpr
     	{
-    		$tipo = "bool";
+    		$tipo = testaBool($esquerda.tipo, $direita.tipo);
     	} 								             #me_booleqdiff_rule     // == and != are egual
-    | metaexpr TOK_BOOL_AND_OR metaexpr              #me_boolandor_rule      // &&   and  ||  are equal
+	| esquerda = metaexpr TOK_BOOL_AND_OR direita = metaexpr
+		{
+			$tipo = testaBool($esquerda.tipo, $direita.tipo);
+		}											 #me_boolandor_rule      // &&   and  ||  are equal
     | symbol
 		{
-			$tipo = $symbol.tipo;
+			if(tabelaSimbolo.lookup($symbol.text) != null) {
+			   $tipo = tabelaSimbolo.lookup($symbol.text).symbol;
+			}
+			
 		}                                            #me_exprsymbol_rule     // a single symbol
-    | literal
-    	{
-    		$tipo = $literal.tipo;
-    	}                                            #me_exprliteral_rule    // literal value
+    | literal {$tipo = $literal.tipo;}                                            #me_exprliteral_rule    // literal value
     | funcall                                        #me_exprfuncall_rule    // a funcion call
-    | cast
-    	{
-    		$tipo = $cast.tipo;
-    	}                                            #me_exprcast_rule       // cast a type to other
+    | cast {$tipo = $cast.tipo;}                     #me_exprcast_rule       // cast a type to other
     ;
 
 sequence_expr
     : '[' funcbody ']'                               #se_create_seq
     ;
 
-funcall: symbol funcall_params                       #funcall_rule
-        /*{
-            System.Console.WriteLine("Uma chamada de funcao! {0}", $symbol.text);
-        }*/
+funcall
+	: symbol funcall_params                       #funcall_rule	
     ;
 
 cast
@@ -226,20 +265,19 @@ funcall_params_cont
 literal
 returns [String tipo]
 	: 'nil'                                           #literalnil_rule
-    | 'true'                                          #literaltrue_rule
-    | number
-    	{
-    		System.out.println("Antigos espiritos do mal, transformem essa forma decadente em Mun-Ra, o de vida eterna!");
-    		$tipo = $number.tipo;
-    	}  							                  #literalnumber_rule
-    | strlit                                          #literalstring_rule
-    | charlit                                         #literal_char_rule
+    | 'true' {$tipo = "bool";}                         #literaltrue_rule
+    | number {$tipo = $number.tipo;}                   #literalnumber_rule
+    | strlit { $tipo = "string";}                      #literalstring_rule
+    | charlit {$tipo = "char";}                        #literal_char_rule
     ;
 
-strlit: TOK_STR_LIT
+strlit
+returns [String tipo]
+	: TOK_STR_LIT
     ;
 
 charlit
+returns [String tipo]
     : TOK_CHAR_LIT
     ;
 
@@ -253,16 +291,9 @@ returns [String tipo]
 
 symbol
 returns [String tipo]
-: simbolo = TOK_ID
+	: TOK_ID
 	{
-		switch($simbolo.text)
-		{
-			case "i" : $tipo = "int"; break;
-			case "f" : $tipo = "float"; break;
-			case "s" : $tipo = "string"; break;
-			case "c" : $tipo = "char"; break;
-			case "b" : $tipo = "bool"; break;
-		}
+
 	}                                          		 #symbol_rule
     ;
 
