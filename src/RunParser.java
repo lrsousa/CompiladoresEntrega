@@ -6,6 +6,7 @@ import javax.swing.filechooser.*;
 
 import parser.MMMLLexer;
 import parser.MMMLParser;
+import parser.MMMLParser.*;
 import parser.MMMLParser.FuncbodyContext;
 import parser.MMMLParser.MetaexprContext;
 
@@ -15,7 +16,7 @@ public class RunParser {
         MMMLParser parser;
         
         JFileChooser chooser = new JFileChooser();
-        FileNameExtensionFilter filter = new FileNameExtensionFilter("Text File", "txt");
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("file text", "txt");
         chooser.setFileFilter(filter);
         chooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
         int retval = chooser.showOpenDialog(null);
@@ -31,7 +32,7 @@ public class RunParser {
             parser = new MMMLParser(tokens);
 //            MetaexprContext opa = parser.metaexpr();
             FuncbodyContext opa = parser.funcbody();
-            System.out.println("Teste tipo: " + opa.tipo);
+            System.out.println("Tamanho pilha: " + parser.pilhaValores.size() + " - Valor no topo: " + parser.pilhaValores.get(0));
             
         } catch (Exception e) {
             // Pikachu!

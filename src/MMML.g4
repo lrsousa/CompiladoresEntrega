@@ -10,6 +10,8 @@ import NestedPackage.SymbolEntry;
 
 @parser::members {
    public NestedSymbolTable<String> tabelaSimbolo = new NestedSymbolTable<String>();
+   public NestedSymbolTable<Object> simbolosValores = new NestedSymbolTable<Object>();
+   public Stack<Object> pilhaValores = new Stack<Object>();
    
    public String testaTipoNumerosExp(String a, String b) {
 		if (a == "string" || b == "string") {
@@ -39,7 +41,7 @@ import NestedPackage.SymbolEntry;
    
    private void imprimirTabela() {
       int i= 1;
-      for (SymbolEntry<String> entry : tabelaSimbolo.getEntries()) {
+      for (SymbolEntry<Object> entry : simbolosValores.getEntries()) {
          System.out.println(i +" simbolo= "+ entry);
          i++;
       }
@@ -141,10 +143,18 @@ returns [int dimension=0, String base]
     ;
 
 funcbody
-returns [String tipo]
-	:	ifexpr                                       #fbody_if_rule
-    |   letexpr {$tipo = $letexpr.tipo;}                                      #fbody_let_rule
-    |   metaexpr { $tipo = $metaexpr.tipo; imprimirTabela();}       		  #fbody_expr_rule
+returns [String tipo, Object valor]
+	:	ifexpr                                       						  										#fbody_if_rule
+    |   letexpr {
+    		$tipo = $letexpr.tipo;
+    		$valor = $letexpr.valor;
+    		System.out.println("FUNCBODY - LETEXPR " + $letexpr.tipo + " - " + $letexpr.valor);
+    	}                                      #fbody_let_rule
+    |   metaexpr {
+    		$tipo = $metaexpr.tipo;
+    		$valor = $metaexpr.valor;
+    		System.out.println("FUNCBODY - METAEXPR " + $metaexpr.tipo + " - " + $metaexpr.valor);
+    	}		  																									#fbody_expr_rule
     ;
 
 ifexpr
@@ -152,45 +162,93 @@ ifexpr
     ;
 
 letexpr
-returns [NestedSymbolTable<String> tabela, String tipo]
-    : 'let' letlist 'in' {tabelaSimbolo = $letlist.tabela;} funcbody {tabelaSimbolo = tabelaSimbolo.getParent(); $tipo = $funcbody.tipo;}                    #letexpression_rule
+returns [String tipo, Object valor]
+    : 'let' letlist 'in' {
+    		System.out.println("PASSANDO");
+    		tabelaSimbolo = $letlist.tabela;
+    		simbolosValores = $letlist.valores;
+    		System.out.println("LETLIST_CONT: " + simbolosValores.getSize() + " - " + tabelaSimbolo.getSize());
+    		System.out.println("TAMANHO PILHA: " + pilhaValores.size());
+      } funcbody {
+      		System.out.println("PARENT: " + simbolosValores.getSize());
+      		tabelaSimbolo = tabelaSimbolo.getParent();
+      		simbolosValores = simbolosValores.getParent();
+      		System.out.println("PARENT: " + simbolosValores.getSize());
+      		$tipo = $funcbody.tipo;
+      		$valor = $funcbody.valor;
+      		System.out.println("LETEXPR - FUNCBODY " + " : " + $funcbody.tipo + " - " + $funcbody.valor);
+    		System.out.println(pilhaValores.size());
+    		System.out.println("TAMANHO PILHA2: " + pilhaValores.size());
+      } 																						                   #letexpression_rule
     ;
 
 letlist
-returns [NestedSymbolTable<String> tabela]
+returns [NestedSymbolTable<String> tabela, NestedSymbolTable<Object> valores]
 	@init
 	{
-		$tabela = new NestedSymbolTable<String>();
+		$tabela = new NestedSymbolTable<String>(tabelaSimbolo);
+		tabelaSimbolo = $tabela;
+		$valores = new  NestedSymbolTable<Object>(simbolosValores);
+		simbolosValores = $valores;
 	}
-    : letvarexpr[$tabela] {$tabela.store($letvarexpr.nome, $letvarexpr.tipo);} letlist_cont[$tabela]                             #letlist_rule
+    : letvarexpr {
+    	$tabela.store($letvarexpr.nome, $letvarexpr.tipo);
+    	$valores.store($letvarexpr.nome, $letvarexpr.valor);
+		System.out.println("LETLIST - LETVAREXPR " + $letvarexpr.tipo + " - " + $letvarexpr.valor);
+		System.out.println("LETLIST - LETVAREXPR - TAMANHO PILHA: " + pilhaValores.size());
+	  } letlist_cont[$tabela, $valores]                             #letlist_rule
     ;
 
-letlist_cont [NestedSymbolTable<String> tabela]
-    : ',' letvarexpr[$tabela] {$tabela.store($letvarexpr.nome, $letvarexpr.tipo);} letlist_cont[$tabela]                    #letlist_cont_rule
+letlist_cont [NestedSymbolTable<String> tabela, NestedSymbolTable<Object> valores]
+    : ',' letvarexpr {
+			$tabela.store($letvarexpr.nome, $letvarexpr.tipo);
+			$valores.store($letvarexpr.nome, $letvarexpr.valor);
+			System.out.println("LET_CONT: " + $letvarexpr.nome + " - " + $letvarexpr.valor);
+ 		  }
+    	  letlist_cont[$tabela, $valores]                    #letlist_cont_rule
     |                                                				   #letlist_cont_end
     ;
 
-letvarexpr [NestedSymbolTable<String> tabela]
-returns [String nome, String tipo]
-    :    symbol {$nome = $symbol.text;} '=' funcbody {$tipo = $funcbody.tipo;}                         						 #letvarattr_rule
-    |    '_'    '=' funcbody {$nome = "_"; $tipo = $funcbody.tipo;}                         #letvarresult_ignore_rule
-    |    esquerda = symbol '::' direita = symbol {$nome = $esquerda.text + $direita.text;} '=' funcbody {$tipo = $funcbody.tipo;}              #letunpack_rule
+letvarexpr
+returns [String nome, String tipo, Object valor]
+    :    symbol {
+    			$nome = $symbol.text;
+    	 } '=' funcbody {
+    	 		$tipo = $funcbody.tipo;
+    	 		$valor = $funcbody.valor;
+    	 }                         						 																					   #letvarattr_rule
+    |    '_' '=' funcbody {
+    			$nome = "_";
+    			$tipo = $funcbody.tipo;
+    			$valor = $funcbody.valor;
+    	 }                         																											   #letvarresult_ignore_rule
+    |    esquerda = symbol '::' direita = symbol {
+    			$nome = $esquerda.text + $direita.text;
+    			$valor = $esquerda.text + $direita.text;
+		 } '=' funcbody {
+		 		$tipo = $funcbody.tipo;
+		 		$valor = $funcbody.valor;
+ 		 }              																													   #letunpack_rule
     ;
 
 metaexpr
-returns [String tipo]
+returns [String tipo, Object valor]
     : '(' fbody = funcbody ')'
     	{
     		$tipo = $fbody.tipo;
+    		$valor = $fbody.valor;
+    		System.out.println ("METAEXPR - FUNCBODY");
     	}                               			 #me_exprparens_rule     // Anything in parenthesis -- if, let, funcion call, etc
-    | sequence_expr                                  #me_list_create_rule    // creates a list [x]
+    | sequence_expr {
+    		System.out.println("SEQUENCE: ");
+    	}                                  #me_list_create_rule    // creates a list [x]
     | TOK_NEG simbolo = symbol {
     		if($simbolo.tipo == "string") {
 	    		$tipo = "string";
     		} else {
 	    		$tipo = "int";
-    			
     		}
+    		System.out.println("TOK_NEG");
     		
     	}											 #me_boolneg_rule        // Negate a variable
     | TOK_NEG '(' funcbody ')'
@@ -203,22 +261,59 @@ returns [String tipo]
     	}                    						 #me_exprpower_rule      // Exponentiation
     | esquerda = metaexpr TOK_CONCAT direita = metaexpr
     	{
+    		System.out.println("TESTE CONCAT: " + $esquerda.tipo + " - " + $direita.tipo);
     		if($esquerda.tipo == "string" || $direita.tipo == "string") {
     			$tipo = "string";
+    			$valor = String.valueOf($esquerda.valor).replace("\"", "") + String.valueOf($direita.valor).replace("\"", "");
+    			System.out.println("CONCAT: " + $valor);
+    			
+    			Object v1 = pilhaValores.pop();
+    			Object v2 = pilhaValores.pop();
+    			System.out.println("VALORES: " + v1 + " - " + v2);
+    			pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    			
     		}
     	}                   						 #me_listconcat_rule     // Sequence concatenation
     | esquerda = metaexpr TOK_DIV_OR_MUL direita = metaexpr
     	{
+    		System.out.println($esquerda.valor + " - " + $TOK_DIV_OR_MUL.text + " - " + $direita.valor);
     		$tipo = testaTipoNumeros($esquerda.tipo, $direita.tipo);
-		}                							 #me_exprmuldiv_rule     // Div and Mult are equal
+    		
+    		if($TOK_DIV_OR_MUL.text.equals("*")) {
+    			Object v1 = pilhaValores.pop();
+    			Object v2 = pilhaValores.pop();
+    			$valor = Integer.parseInt(String.valueOf($esquerda.valor)) * Integer.parseInt(String.valueOf($direita.valor));
+    			pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    		} else {
+    			Object v1 = pilhaValores.pop();
+    			Object v2 = pilhaValores.pop();
+    			
+    			$valor = Integer.parseInt(String.valueOf($esquerda.valor)) / Integer.parseInt(String.valueOf($direita.valor));
+    			pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    		}
+		}                							 																#me_exprmuldiv_rule     // Div and Mult are equal
     | esquerda = metaexpr TOK_PLUS_OR_MINUS direita = metaexpr
     	{
     		$tipo = testaTipoNumeros($esquerda.tipo, $direita.tipo);
-    	}            								 #me_exprplusminus_rule  // Sum and Sub are equal
+    		if($TOK_PLUS_OR_MINUS.text.equals("-")) {
+    			Object v1 = pilhaValores.pop();
+    			Object v2 = pilhaValores.pop();
+	    		System.out.println("SUBTRACAO: " + v1 + " - " + v2);
+    			
+    			$valor = Integer.parseInt(String.valueOf($esquerda.valor)) - Integer.parseInt(String.valueOf($direita.valor));
+    			pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    		} else {
+    			Object v1 = pilhaValores.pop();
+    			Object v2 = pilhaValores.pop();
+    			
+    			$valor = Integer.parseInt(String.valueOf($esquerda.valor)) + Integer.parseInt(String.valueOf($direita.valor));
+    			pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    		}
+    	}            								 															#me_exprplusminus_rule  // Sum and Sub are equal
     | esquerda = metaexpr TOK_CMP_GT_LT direita = metaexpr
     	{
     		$tipo = testaBool($esquerda.tipo, $direita.tipo);
-    	}                							 #me_boolgtlt_rule       // < <= >= > are equal
+    	}                							 															#me_boolgtlt_rule       // < <= >= > are equal
     | esquerda = metaexpr TOK_CMP_EQ_DIFF direita = metaexpr
     	{
     		$tipo = testaBool($esquerda.tipo, $direita.tipo);
@@ -230,13 +325,31 @@ returns [String tipo]
     | symbol
 		{
 			if(tabelaSimbolo.lookup($symbol.text) != null) {
-			   $tipo = tabelaSimbolo.lookup($symbol.text).symbol;
+			   SymbolEntry se = tabelaSimbolo.lookup($symbol.text);
+			   $tipo = (String) se.symbol;
+			   System.out.println("NOVO NA PILHA1: " + $valor + " - " + "Deveria2: " + simbolosValores.getSize());
+			}
+			if(simbolosValores.lookup($symbol.text) != null) {
+			   SymbolEntry sv = simbolosValores.lookup($symbol.text);
+			   $valor = sv.symbol;
+			   System.out.println("NOVO NA PILHA2: " + $valor + " - " + "Deveria2: " + simbolosValores.getSize());
+			   pilhaValores.push(String.valueOf($valor).replace("\"", ""));
 			}
 			
 		}                                            #me_exprsymbol_rule     // a single symbol
-    | literal {$tipo = $literal.tipo;}                                            #me_exprliteral_rule    // literal value
+    | literal {
+    	$tipo = $literal.tipo;
+    	$valor = $literal.valor;
+    	System.out.println("LITERAL ACIMA: " + $valor);
+      }                                              #me_exprliteral_rule    // literal value
     | funcall                                        #me_exprfuncall_rule    // a funcion call
-    | cast {$tipo = $cast.tipo;}                     #me_exprcast_rule       // cast a type to other
+    | cast {
+    	$tipo = $cast.tipo;
+    	$valor = $cast.valor;
+    	pilhaValores.push(String.valueOf($valor).replace("\"", ""));
+    	System.out.println("CAST -> : " + tabelaSimbolo.getSize());
+      
+      }                     #me_exprcast_rule       // cast a type to other
     ;
 
 sequence_expr
@@ -248,8 +361,11 @@ funcall
     ;
 
 cast
-returns [String tipo]
-    : c = type funcbody {$tipo = $c.tipo;}            #cast_rule
+returns [String tipo, Object valor]
+    : c = type funcbody {
+		$tipo = $c.tipo;
+		$valor = $funcbody.valor;
+	  }            										#cast_rule
     ;
 
 funcall_params
@@ -263,17 +379,26 @@ funcall_params_cont
     ;
 
 literal
-returns [String tipo]
-	: 'nil'                                           #literalnil_rule
-    | 'true' {$tipo = "bool";}                         #literaltrue_rule
-    | number {$tipo = $number.tipo;}                   #literalnumber_rule
-    | strlit { $tipo = "string";}                      #literalstring_rule
-    | charlit {$tipo = "char";}                        #literal_char_rule
+returns [String tipo, Object valor]
+	: 'nil'                                           			#literalnil_rule
+    | 'true' {$tipo = "bool";}                         			#literaltrue_rule
+    | number {
+    	$tipo = $number.tipo;
+    	$valor = $number.valor;
+	  }     #literalnumber_rule
+    | strlit {
+    	$tipo = "string";
+    	$valor = $strlit.valor;
+    	System.out.println("LITERAL: " + $valor);
+      }                      			#literalstring_rule
+    | charlit {$tipo = "char";}                        			#literal_char_rule
     ;
 
 strlit
-returns [String tipo]
-	: TOK_STR_LIT
+returns [String tipo, Object valor]
+	: TOK_STR_LIT {
+		$valor = $TOK_STR_LIT.text;
+	  }
     ;
 
 charlit
@@ -282,18 +407,24 @@ returns [String tipo]
     ;
 
 number
-returns [String tipo]
-	: FLOAT {$tipo = "float";}                        #numberfloat_rule
-    | DECIMAL {$tipo = "int";}                        #numberdecimal_rule
-    | HEXADECIMAL {$tipo = "int";}                    #numberhexadecimal_rule
-    | BINARY {$tipo = "int";}                         #numberbinary_rule
+returns [String tipo, Object valor]
+	: FLOAT {
+		$tipo = "float";
+		$valor = $FLOAT.text;
+		System.out.println($FLOAT.text);}							                         #numberfloat_rule
+    | DECIMAL {
+    	$tipo = "int";
+    	$valor = $DECIMAL.text;
+    	System.out.println($DECIMAL.text);}						                         #numberdecimal_rule
+    | HEXADECIMAL {$tipo = "int";}                    							 #numberhexadecimal_rule
+    | BINARY {$tipo = "int";}                         							 #numberbinary_rule
 	;
 
 symbol
 returns [String tipo]
-	: TOK_ID
+	: token = TOK_ID
 	{
-
+		
 	}                                          		 #symbol_rule
     ;
 
